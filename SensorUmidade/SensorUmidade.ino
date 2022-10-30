@@ -9,7 +9,7 @@
 
 #define MEDICOES_POR_REGISTRO 10
 #define BYTES_POR_REGISTRO 13
-
+#define INTERVALO_PROCESSO_MS 3500
 //#define DEBUG_MODE
 
 void(* resetFunc) (void) = 0;
@@ -28,18 +28,54 @@ typedef union ByteConverter {
   unsigned char bytes[4];
 };
 
+unsigned int IntervaloSelecionado = 0;
 int MedicoesTemperatura[10] = {0};
 int MedicoesUmidade[10] = {0};
 int ContadorMedicoes = 0;
 int ContadorRegistros = 0;
 
+
 void setup() 
 {
   Serial.begin(9600);
   ContadorRegistros = leContadorRegistros();
+  SetupTimer1(INTERVALO_PROCESSO_MS);
 }
 
 void loop() 
+{
+  Serial.println("Loop cycle...");
+  delay(5000);
+}
+
+unsigned int CalculateCounterByInterval(unsigned int intervalMillis)
+{
+  return 65536 - (intervalMillis * 16000) / 1024;
+}
+
+void SetTimer1Counter()
+{
+  TCNT1 = CalculateCounterByInterval(IntervaloSelecionado);
+}
+
+void SetupTimer1(unsigned int intervaloMillis) //Max: 4194ms
+{
+  IntervaloSelecionado = intervaloMillis;
+
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCCR1B |= (1 << CS10) | (1 << CS12); //Prescaler: 1024 - Max value
+  SetTimer1Counter();
+  TIMSK1 |= (1 << TOIE1); //Habilita interrupção timer 1
+}
+
+ISR(TIMER1_OVF_vect) //Registra callback para interrupção do timer1
+{
+  SetTimer1Counter();
+  ProcessoPrincipal();  
+}
+
+void ProcessoPrincipal()
 {
   Serial.println("Sensor de Umidade. Opcoes: [p - Print historico | c - Limpa memória | r - Print valores na EEPROM]");
   Serial.print("Contador registros: ");
