@@ -2,14 +2,16 @@
 /* Curso de Engenharia de Controle e Automação */
 /* Aluno: Fernando A. C. de Barros */
 /* Disciplina: Microprocessadores */
-/* Atividade: Armazenar leituras em memória EEPROM para recuperação posterior. */
+/* Atividade: Armazenar leituras em memória EEPROM para recuperação posterior com interrupção via timer. */
 /* Microcontrolador utilizado: Arduino Nano. */
 
 #include <EEPROM.h>
 
 #define MEDICOES_POR_REGISTRO 10
 #define BYTES_POR_REGISTRO 13
-#define INTERVALO_PROCESSO_MS 3500
+#define INTERVALO_PROCESSO_MS 1000
+#define FREQ_CLOCK 16000000
+#define PRESCALER_ESCOLHIDO 1024
 //#define DEBUG_MODE
 
 void(* resetFunc) (void) = 0;
@@ -44,39 +46,6 @@ void setup()
 
 void loop() 
 {
-  Serial.println("Loop cycle...");
-  delay(5000);
-}
-
-unsigned int CalculateCounterByInterval(unsigned int intervalMillis)
-{
-  return 65536 - (intervalMillis * 16000) / 1024;
-}
-
-void SetTimer1Counter()
-{
-  TCNT1 = CalculateCounterByInterval(IntervaloSelecionado);
-}
-
-void SetupTimer1(unsigned int intervaloMillis) //Max: 4194ms
-{
-  IntervaloSelecionado = intervaloMillis;
-
-  TCCR1A = 0;
-  TCCR1B = 0;
-  TCCR1B |= (1 << CS10) | (1 << CS12); //Prescaler: 1024 - Max value
-  SetTimer1Counter();
-  TIMSK1 |= (1 << TOIE1); //Habilita interrupção timer 1
-}
-
-ISR(TIMER1_OVF_vect) //Registra callback para interrupção do timer1
-{
-  SetTimer1Counter();
-  ProcessoPrincipal();  
-}
-
-void ProcessoPrincipal()
-{
   Serial.println("Sensor de Umidade. Opcoes: [p - Print historico | c - Limpa memória | r - Print valores na EEPROM]");
   Serial.print("Contador registros: ");
   Serial.println(ContadorRegistros);
@@ -104,7 +73,40 @@ void ProcessoPrincipal()
         break;
     }
   }
+  
+  delay(5000);
+}
 
+unsigned int CalculateCounterByInterval(unsigned int intervalMillis)
+{
+  return ((double) intervalMillis / 1000) / ((double) PRESCALER_ESCOLHIDO / (double)FREQ_CLOCK);
+}
+
+void SetTimer1Counter()
+{
+  TCNT1 = CalculateCounterByInterval(IntervaloSelecionado);
+}
+
+void SetupTimer1(unsigned int intervaloMillis) //Max: 4194ms
+{
+  IntervaloSelecionado = intervaloMillis;
+
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCCR1B |= (1 << CS10) | (1 << CS12); //Prescaler: 1024 - Max value
+  TCNT1 = 0;
+  TIMSK1 |= (1 << OCIE1A); //Habilita interrupção timer 1
+  OCR1A = CalculateCounterByInterval(IntervaloSelecionado);
+}
+
+ISR(TIMER1_COMPA_vect) //Registra callback para interrupção do timer1
+{
+  ProcessoPrincipal();
+  TCNT1 = 0;
+}
+
+void ProcessoPrincipal()
+{
   MedicoesUmidade[ContadorMedicoes] = leituraSensorUmidade();
   MedicoesTemperatura[ContadorMedicoes++] = leituraSensorTemperatura();
   
@@ -113,8 +115,6 @@ void ProcessoPrincipal()
     registraMedicoes();
     ContadorMedicoes = 0;
   }
-  
-  delay(1000);
 }
 
 void registraMedicoes()
