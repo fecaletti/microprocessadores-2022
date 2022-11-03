@@ -7,10 +7,13 @@
 
 #include <EEPROM.h>
 
-#define MEDICOES_POR_REGISTRO 10
-#define BYTES_POR_REGISTRO 13
 #define INTERVALO_PROCESSO_MS 3500
 #define PINO_AD 10
+#define LIMITE_SUP_TIMER 4000
+#define LIMITE_INF_TIMER 0
+
+#define SELECTED_PRESCALER 1024
+#define BOARD_CLK 16000000
 //#define DEBUG_MODE
 
 void(* resetFunc) (void) = 0;
@@ -54,12 +57,12 @@ void loop()
 
 unsigned int CalculateCounterByInterval(unsigned int intervalMillis)
 {
-  return 65536 - (intervalMillis * 16000) / 1024;
+  return ((double) intervalMillis / 1000) / ((double) SELECTED_PRESCALER / (double) BOARD_CLK);
 }
 
 void SetTimer1Counter()
 {
-  TCNT1 = CalculateCounterByInterval(IntervaloSelecionado);
+  TCNT1 = 0;
 }
 
 void SetupTimer1(unsigned int intervaloMillis) //Max: 4194ms
@@ -69,13 +72,12 @@ void SetupTimer1(unsigned int intervaloMillis) //Max: 4194ms
   TCCR1A = 0;
   TCCR1B = 0;
   TCCR1B |= (1 << CS10) | (1 << CS12); //Prescaler: 1024 - Max value
-  //SetTimer1Counter();
-  TCNT1 = 0;
-  TIMSK1 |= (1 << OCR1A); //Habilita interrupção timer 1
-  
+  SetTimer1Counter();
+  TIMSK1 |= (1 << OCIE1A); //Habilita interrupção timer 1
+  OCR1A = CalculateCounterByInterval(IntervaloSelecionado);
 }
 
-ISR(TIMER1_OVF_vect) //Registra callback para interrupção do timer1
+ISR(TIMER1_COMPB_vect) //Registra callback para interrupção do timer1
 {
   SetTimer1Counter();
   ProcessoAD();  
@@ -93,14 +95,13 @@ void ProcessoAD()
 void RecebeValorTaxaAD()
 {
   int setandoValor = 1;
-  Serial.print("Insira o valor desejado em ms (Max. 4000): ");
+  Serial.println("Insira o valor desejado em ms (Max. 4000): ");
   String output = "";
 
-  while(Serial.available())
-  {
-    output += Serial.read();
-  }
+  while(!Serial.available()) { }
+
+  output = Serial.readString();
   unsigned int result = output.toInt();
-  if((result > 0) && (result <= 4000))
+  if((result > LIMITE_INF_TIMER) && (result <= LIMITE_SUP_TIMER))
     SetupTimer1(result);
 }
