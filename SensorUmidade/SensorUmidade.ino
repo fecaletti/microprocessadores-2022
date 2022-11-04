@@ -27,6 +27,7 @@ typedef union ByteConverter {
 unsigned int IntervaloSelecionado = 0;
 unsigned int MedicaoAD = 0;
 unsigned long LoopMillis = 0;
+bool PrintResultadoAd = true;
 
 void setup() 
 {
@@ -44,7 +45,7 @@ void loop()
     Serial.print("Medidor analogico. Taxa atual: ");
     Serial.print(IntervaloSelecionado);
     Serial.println(" ms");
-    Serial.println("Opcoes: [t - Alterar taxa de leitura AD]");
+    Serial.println("Opcoes: [t - Alterar taxa de leitura AD | l - Liga/Deliga print resultado medicao]");
   }
 
   if(Serial.available())
@@ -55,6 +56,10 @@ void loop()
     {
       case 't':
         RecebeValorTaxaAD();
+        break;
+
+      case 'l':
+        TogglePrintAd();
         break;
       
       default:
@@ -96,8 +101,14 @@ ISR(TIMER1_COMPA_vect) //Registra callback para interrupção do timer1
 
 void ProcessoAD()
 {
-  Serial.println("Processo AD - Iniciando");
+  if(PrintResultadoAd)
+    Serial.println("Processo AD - Iniciando");
+
   MedicaoAD = analogRead(PINO_AD);
+
+  if(!PrintResultadoAd)
+    return;
+
   Serial.print("Valor obtido: ");
   Serial.println(MedicaoAD);
   Serial.println("Processo AD - Fim");
@@ -116,4 +127,9 @@ void RecebeValorTaxaAD()
   unsigned int result = output.toInt();
   if((result > LIMITE_INF_TIMER) && (result <= LIMITE_SUP_TIMER))
     SetupTimer1(result);
+}
+
+void TogglePrintAd()
+{
+  PrintResultadoAd = !PrintResultadoAd;
 }
