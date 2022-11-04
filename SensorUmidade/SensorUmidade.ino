@@ -14,7 +14,7 @@
 
 #define SELECTED_PRESCALER 1024
 #define BOARD_CLK 16000000
-//#define DEBUG_MODE
+#define MAIN_LOOP_INTERVAL_MS 5000
 
 void(* resetFunc) (void) = 0;
 
@@ -26,6 +26,7 @@ typedef union ByteConverter {
 
 unsigned int IntervaloSelecionado = 0;
 unsigned int MedicaoAD = 0;
+unsigned long LoopMillis = 0;
 
 void setup() 
 {
@@ -36,7 +37,16 @@ void setup()
 
 void loop() 
 {
-  Serial.println("Medidor analogico. Opcoes: [t - Alterar taxa de leitura AD]");
+  unsigned long currentMillis = millis();
+  if((currentMillis - LoopMillis) >= MAIN_LOOP_INTERVAL_MS)
+  {  
+    LoopMillis = currentMillis;
+    Serial.print("Medidor analogico. Taxa atual: ");
+    Serial.print(IntervaloSelecionado);
+    Serial.println(" ms");
+    Serial.println("Opcoes: [t - Alterar taxa de leitura AD]");
+  }
+
   if(Serial.available())
   {
     char command = Serial.read();
@@ -52,7 +62,8 @@ void loop()
         break;
     }
   }
-  delay(5000);
+
+  delay(10);
 }
 
 unsigned int CalculateCounterByInterval(unsigned int intervalMillis)
@@ -77,10 +88,10 @@ void SetupTimer1(unsigned int intervaloMillis) //Max: 4194ms
   OCR1A = CalculateCounterByInterval(IntervaloSelecionado);
 }
 
-ISR(TIMER1_COMPB_vect) //Registra callback para interrupção do timer1
+ISR(TIMER1_COMPA_vect) //Registra callback para interrupção do timer1
 {
-  SetTimer1Counter();
   ProcessoAD();  
+  SetTimer1Counter();
 }
 
 void ProcessoAD()
@@ -94,6 +105,7 @@ void ProcessoAD()
 
 void RecebeValorTaxaAD()
 {
+  TIMSK1 = 0; //Desabilita interrupção TIM1
   int setandoValor = 1;
   Serial.println("Insira o valor desejado em ms (Max. 4000): ");
   String output = "";
